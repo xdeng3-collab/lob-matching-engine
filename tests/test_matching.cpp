@@ -115,6 +115,13 @@ TEST(fok_is_all_or_nothing_and_leaves_no_trace) {
   CHECK(engine.book().check_invariants());
 }
 
+TEST(market_order_with_an_empty_book_is_rejected) {
+  MatchingEngine engine(1, 1000);
+  const SubmitResult result = engine.submit(market(1, Side::Buy, 10));
+  CHECK_EQ(result.status, Status::Rejected);
+  CHECK_EQ(result.reason, RejectReason::NoLiquidityForMarketOrder);
+}
+
 TEST(market_order_takes_every_reachable_level) {
   MatchingEngine engine(1, 1000);
   engine.submit(limit(1, Side::Sell, 100, 5, 1));
