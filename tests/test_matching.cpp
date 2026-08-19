@@ -168,6 +168,17 @@ TEST(reducing_in_place_keeps_time_priority) {
   CHECK(engine.book().check_invariants());
 }
 
+TEST(raising_quantity_goes_to_the_back_of_the_queue) {
+  MatchingEngine engine(1, 1000);
+  engine.submit(limit(1, Side::Buy, 100, 10, 1));
+  engine.submit(limit(2, Side::Buy, 100, 10, 2));
+
+  engine.replace(1, 100, 20, /*timestamp=*/0);
+  CHECK_EQ(engine.book().queue_position(1), 1u);  // lost its place, as a venue would
+  CHECK_EQ(engine.book().quantity_at(100), 30);
+  CHECK(engine.book().check_invariants());
+}
+
 TEST(queue_ahead_quantity_is_what_a_backtest_must_wait_for) {
   MatchingEngine engine(1, 1000);
   engine.submit(limit(1, Side::Buy, 100, 7, 1));
