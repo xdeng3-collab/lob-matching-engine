@@ -1,0 +1,41 @@
+# Benchmark run
+
+machine:  Apple M1, 8 cores, macOS 15.6.1, arm64
+compiler: Apple clang version 17.0.0 (clang-1700.6.4.2)
+flags:    -O2 (CMAKE_BUILD_TYPE=Release)
+command:  ./build/bench_book 9
+date:     2026-09-15T03:44:10Z
+note:     laptop under normal desktop load, not an isolated core.
+
+replaying 2000000 events, price grid 200000 ticks, 9 repeats
+clock: steady_clock, granularity 41.0 ns, now()-pair round trip 42.0 ns
+
+Amortised cost, ns/op -- one clock read around the whole replay
+                               median   [min - max]
+flat tick-indexed book          165.1   [141.7 - 241.1]
+std::map level book            2614.1   [2474.4 - 2704.0]
+speedup (x)                      15.8   [10.6 - 18.8]
+
+Tail latency, ns -- per-operation timing, +42.0 ns of clock per sample
+                               median   [min - max]
+flat p50                        125.0   [84.0 - 166.0]
+flat p99                        708.0   [667.0 - 875.0]
+flat p99.9                     1416.0   [1250.0 - 2750.0]
+map  p50                        292.0   [291.0 - 292.0]
+map  p99                      20667.0   [18125.0 - 22667.0]
+map  p99.9                    56958.0   [42459.0 - 77625.0]
+
+How to read this:
+  * Quote the median, and read the range as the machine rather than the
+    book. A single replay is not reproducible on a laptop: inside one
+    9-repeat invocation the speedup ranged 3.4x to 20.7x. The median is:
+    two such invocations gave 15.3x and 15.0x. That is why this prints
+    both, and why a benchmark that reports one number from one run is
+    reporting the scheduler.
+  * Every tail sample carries the 42.0 ns now() round trip, and the clock
+    advances in 41.0 ns steps. That is noise against a p99.9 in
+    microseconds and a large fraction of a p50 in the tens of ns, which
+    is why cost belongs in the amortised table and only the tail belongs
+    in this one.
+  * The map baseline only inserts and cancels -- it never matches -- so it
+    is being flattered. The flat book is doing strictly more work.

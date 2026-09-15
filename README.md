@@ -23,27 +23,51 @@ ctest --test-dir build --output-on-failure
 ## Measured
 
 Two million synthetic events (30% cancels, quotes clustered near the mid over a
-200,000-tick grid), replayed against both implementations from the same seed.
-Apple M-series, clang 17, `-O2`:
+200,000-tick grid), replayed against both implementations from the same seed,
+nine repeats per invocation. Apple M1, clang 17, `-O2`, laptop under normal
+desktop load. Full output with machine provenance in
+[`results/bench-apple-m1.txt`](results/bench-apple-m1.txt); regenerate it with
+`./build/bench_book 9`.
 
-| Level container | p50 | p99 | p99.9 | Throughput |
-|---|---|---|---|---|
-| **Flat tick-indexed array** | **42 ns** | **541 ns** | **1.4 µs** | **8.3 M ops/s** |
-| `std::map<Price, Level>` | 125 ns | 9.3 µs | 16.8 µs | 0.9 M ops/s |
+**Amortised cost** — one clock read around the whole replay, so nothing but the
+book sits inside the timed region. This is the number to quote for cost.
 
-Roughly 3× at the median, **17× at p99**, and 9× the throughput.
+| Level container | median ns/op | range over repeats |
+|---|---|---|
+| **Flat tick-indexed array** | **165** | 142 – 241 |
+| `std::map<Price, Level>` | 2614 | 2474 – 2704 |
+| **Speedup** | **15.8×** | 10.6 – 18.8 |
 
-Two honest caveats, because a benchmark without them is marketing:
+**Tail latency** — per-operation timing, which is the only way to see p99.9 and
+costs 42 ns of clock in every sample.
 
-* The `std::map` baseline only inserts and cancels. It never matches, so it is
-  doing strictly *less* work than the flat book it loses to.
-* Per-operation timing includes `steady_clock` overhead, tens of nanoseconds on
-  this machine. That inflates the p50 column for both rows and compresses the
-  ratio; the tail columns are where the difference actually lives.
+| | p50 | p99 | p99.9 |
+|---|---|---|---|
+| **Flat tick-indexed array** | **125 ns** | **708 ns** | **1.4 µs** |
+| `std::map<Price, Level>` | 292 ns | 20.7 µs | 57.0 µs |
 
-Percentiles rather than means is the whole point. A path that is 40 ns typically
-and 9 µs at p99.9 is a different system from one that is 120 ns flat, and only
-the second is something you can build on.
+Roughly 16× on amortised cost and **29× at p99**.
+
+Three caveats, because a benchmark without them is marketing:
+
+* **Quote the median; read the range as the machine, not the book.** A single
+  replay is not reproducible on a laptop — inside one nine-repeat invocation the
+  speedup ranged 3.4× to 20.7×. The median is what survives: two such
+  invocations gave 15.3× and 15.0×. A benchmark that reports one number from one
+  run is reporting the scheduler.
+* **The p50 column is substantially timer.** `steady_clock` here advances in
+  41 ns steps and a `now()` pair costs 42 ns, a large fraction of a median in
+  the low hundreds. The benchmark measures both and prints them rather than
+  asking you to take the caveat on trust. Note that the tail-table p50 (125 ns)
+  sits *below* the amortised mean (165 ns) — which is what a right-skewed
+  latency distribution should do, and the reason the two tables do not and
+  should not agree.
+* **The `std::map` baseline only inserts and cancels.** It never matches, so it
+  is doing strictly *less* work than the flat book it loses to.
+
+Percentiles rather than means is the whole point. A path that is 125 ns
+typically and 57 µs at p99.9 is a different system from one that is 165 ns flat,
+and only the second is something you can build on.
 
 ## Why the container choice is the design
 

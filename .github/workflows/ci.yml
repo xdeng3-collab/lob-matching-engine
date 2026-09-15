@@ -20,3 +20,27 @@ jobs:
         run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  bench:
+    # Shared runners are noisy and share a core with whatever else GitHub is
+    # scheduling, so this job exists to prove the benchmark still builds, runs,
+    # and produces a speedup in the right direction -- not to produce numbers.
+    # The quotable numbers are in results/, measured on a named machine.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Benchmark
+        run: ./build/bench_book 3 | tee bench-ci.txt
+      - name: Assert the flat book still wins
+        run: |
+          speedup=$(awk '/^speedup/ {print $3}' bench-ci.txt)
+          echo "median speedup on this runner: ${speedup}x"
+          awk -v s="$speedup" 'BEGIN { if (s < 3) { print "regression: speedup " s "x is below the 3x floor"; exit 1 } }'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-ci-${{ github.sha }}
+          path: bench-ci.txt
